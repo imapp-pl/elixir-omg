@@ -107,6 +107,7 @@ defmodule OMG.ChildChain.BlockQueue.Core do
     # config:
     child_block_interval: nil,
     block_submit_every_nth: 1,
+    block_submit_after_n_txs: :infinity,
     finality_threshold: 12,
     gas_price_adj_params: %GasPriceAdjustment{}
   ]
@@ -129,6 +130,9 @@ defmodule OMG.ChildChain.BlockQueue.Core do
           child_block_interval: pos_integer(),
           # configure to trigger forming a child chain block every this many Ethereum blocks are mined since enqueueing
           block_submit_every_nth: pos_integer(),
+          # configure to trigger forming a child chain block when there are this many pending transactions.
+          # Defaults to `:infinity` which means - pending transaction count takes no effect on block forming.
+          block_submit_after_n_txs: pos_integer() | atom(),
           # depth of max reorg we take into account
           finality_threshold: pos_integer(),
           # the gas price adjustment strategy parameters
@@ -179,18 +183,32 @@ defmodule OMG.ChildChain.BlockQueue.Core do
   Based on that, decides whether new block forming should be triggered as well as the gas price to use for subsequent
   submissions.
   """
-  @spec set_ethereum_status(Core.t(), BlockQueue.eth_height(), BlockQueue.plasma_block_num(), boolean()) ::
+  @spec set_ethereum_status(Core.t(), BlockQueue.eth_height(), BlockQueue.plasma_block_num(), pos_integer()) ::
           {:do_form_block, Core.t()} | {:dont_form_block, Core.t()}
-  def set_ethereum_status(state, parent_height, mined_child_block_num, is_empty_block) do
+  def set_ethereum_status(state, parent_height, mined_child_block_num, pending_txs_count) do
     new_state =
       %{state | parent_height: parent_height}
       |> set_mined(mined_child_block_num)
       |> adjust_gas_price()
 
-    if should_form_block?(new_state, is_empty_block) do
+    if should_form_block?(new_state, pending_txs_count) do
       {:do_form_block, %{new_state | wait_for_enqueue: true}}
     else
       {:dont_form_block, new_state}
+    end
+  end
+
+  @spec check_block_fulfilled(Core.t(), pos_integer()) ::
+          {:do_form_block, Core.t()} | {:dont_form_block, Core.t()}
+  def check_block_fulfilled(state, pending_txs_count) do
+    state
+    |> should_form_block?(pending_txs_count)
+    |> case do
+      true ->
+        {:do_form_block, %{state | wait_for_enqueue: true}}
+
+      false ->
+        {:dont_form_block, state}
     end
   end
 
@@ -508,20 +526,23 @@ defmodule OMG.ChildChain.BlockQueue.Core do
   defp to_mined_block_filter(%{formed_child_block_num: formed} = state),
     do: fn {blknum, _} -> next_blknum_to_mine(state) <= blknum and blknum <= formed end
 
-  @spec should_form_block?(Core.t(), boolean()) :: boolean()
+  @spec should_form_block?(Core.t(), pos_integer()) :: boolean()
   defp should_form_block?(
          %Core{
            parent_height: parent_height,
            last_enqueued_block_at_height: last_enqueued_block_at_height,
            block_submit_every_nth: block_submit_every_nth,
+           block_submit_after_n_txs: block_submit_after_n_txs,
            wait_for_enqueue: wait_for_enqueue
          },
-         is_empty_block
+         pending_txs_count
        ) do
     # e.g. if we're at 15th Ethereum block now, last enqueued was at 14th, we're submitting a child chain block on every
     # single Ethereum block (`block_submit_every_nth` == 1), then we could form a new block (`it_is_time` is `true`)
     it_is_time = parent_height - last_enqueued_block_at_height >= block_submit_every_nth
-    should_form_block = it_is_time and !wait_for_enqueue and !is_empty_block
+    block_fulfilled = pending_txs_count >= block_submit_after_n_txs
+    is_empty_block = pending_txs_count == 0
+    should_form_block = (it_is_time or block_fulfilled) and !wait_for_enqueue and !is_empty_block
 
     _ =
       if !should_form_block do
