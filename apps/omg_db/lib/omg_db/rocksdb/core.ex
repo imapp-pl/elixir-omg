@@ -41,7 +41,10 @@ defmodule OMG.DB.RocksDB.Core do
     # watcher only
     spend: "spend",
     # watcher and child chain
-    omg_eth_contracts: "omg_eth_contracts"
+    omg_eth_contracts: "omg_eth_contracts",
+
+    # experiments for elixir-omg#1257
+    address_partition: "adpai",
   }
 
   @key_types Map.keys(@keys_prefixes)
@@ -88,6 +91,7 @@ defmodule OMG.DB.RocksDB.Core do
   defp key_for_item(:exit_info, {position, _exit_info}), do: key(:exit_info, position)
   defp key_for_item(:in_flight_exit_info, {position, _info}), do: key(:in_flight_exit_info, position)
   defp key_for_item(:competitor_info, {position, _info}), do: key(:competitor_info, position)
+  defp key_for_item(:address_partition, {partition, _utxo_list}), do: key(:address_partition, partition)
   defp key_for_item(parameter, value) when parameter in @single_value_parameter_names, do: key(parameter, value)
 
   defp parse_multi_update({:put, :block, %{number: number, hash: hash} = item}) do

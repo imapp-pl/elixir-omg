@@ -94,6 +94,14 @@ defmodule OMG.DB.RocksDB.Server do
     do_utxo(utxo_pos, state)
   end
 
+  def handle_call({:address_partition, pkey}, _from, state) do
+    {
+      :reply,
+      Core.key(:address_partition, pkey) |> get(state) |> Core.decode_value(), # result,
+      state
+    }
+  end
+
   def handle_call({:block_hashes, block_numbers_to_fetch}, _from, state) do
     do_block_hashes(block_numbers_to_fetch, state)
   end
