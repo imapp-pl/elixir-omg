@@ -23,12 +23,13 @@ defmodule OMG.WatcherRPC.Web.Validator.Order do
 
   alias OMG.State.Transaction
   alias OMG.Utils.HttpRPC.Validator.Base
-  alias OMG.WatcherInfo.Transaction, as: TransactionCreator
+  alias OMG.WatcherInfo.OrderFeeFetcher
 
   @doc """
   Parses and validates request body
   """
-  @spec parse(map()) :: {:ok, TransactionCreator.order_t()} | Base.validation_error_t()
+  @spec parse(map()) ::
+          {:ok, OrderFeeFetcher.order_without_fee_amount_t()} | Base.validation_error_t()
   def parse(params) do
     with {:ok, owner} <- expect(params, "owner", :address),
          {:ok, metadata} <- expect(params, "metadata", [:hash, :optional]),
