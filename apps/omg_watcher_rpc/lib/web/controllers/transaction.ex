@@ -75,9 +75,9 @@ defmodule OMG.WatcherRPC.Web.Controller.Transaction do
   If also provided with receiver's address, creates and encodes a transaction.
   """
   def create(conn, params) do
-    with {:ok, order} <- Validator.Order.parse(params),
-         {:ok, order} <- OrderFeeFetcher.add_fee_to_order(order) do
-      order
+    with {:ok, order_without_fee_amount} <- Validator.Order.parse(params),
+         {:ok, order_with_fee_amount} <- OrderFeeFetcher.add_fee_to_order(order_without_fee_amount) do
+      order_with_fee_amount
       |> InfoApiTransaction.create()
       |> TransactionCreator.include_typed_data()
       |> api_response(conn, :create)
