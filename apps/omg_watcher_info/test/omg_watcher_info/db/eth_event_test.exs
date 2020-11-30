@@ -519,4 +519,35 @@ defmodule OMG.WatcherInfo.DB.EthEventTest do
       assert Enum.empty?(data)
     end
   end
+
+  @tag fixtures: [:phoenix_ecto_sandbox, :alice]
+  test "deposited and exited utxo is retrievable by position", %{alice: alice} do
+    assert :ok =
+             DB.EthEvent.insert_deposits!([
+               %{
+                 root_chain_txhash: Crypto.hash(<<1000::256>>),
+                 eth_height: 1,
+                 log_index: 0,
+                 owner: alice.addr,
+                 currency: @eth,
+                 amount: 333,
+                 blknum: 1
+               }
+             ])
+
+    assert :ok =
+             DB.EthEvent.insert_exits!(
+               [
+                 %{
+                   root_chain_txhash: Crypto.hash(<<1001::256>>),
+                   eth_height: 2,
+                   log_index: 1,
+                   call_data: %{utxo_pos: Utxo.Position.encode(Utxo.position(1, 0, 0))}
+                 }
+               ],
+               :in_flight_exit
+             )
+
+    assert %DB.TxOutput{} = DB.TxOutput.get_by_position(Utxo.position(1, 0, 0))
+  end
 end
